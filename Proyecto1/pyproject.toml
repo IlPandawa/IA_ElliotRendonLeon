@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "aEstrella"
+version = "0.0.1"
+description = "Proyecto 1, Laberinto con A*"
+authors = ["Elliot Rendón León <l21120250@morelia.tecnm.mx>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+opencv-python = "*"
+anaconda = "*"
+sift = "*"
+scikit-learn = "*"
+numpy = "*"
+pandas = "*"
+tensorflow = "*"
+pygame = "*"
+
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
