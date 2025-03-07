@@ -1,4 +1,5 @@
 import pygame
+from queue import PriorityQueue # Para añadir a cola
 
 # Configuraciones iniciales
 ANCHO_VENTANA = 600
@@ -14,6 +15,11 @@ ROJO = (255, 0, 0)
 NARANJA = (255, 165, 0)
 PURPURA = (128, 0, 128)
 
+AZUL = (135, 206, 250)
+
+pygame.font.init()  # para poder escribir en el tablero
+FUENTE = pygame.font.Font(None, 18)  # Fuente 
+
 class Nodo:
     def __init__(self, fila, col, ancho, total_filas):
         self.fila = fila
@@ -23,6 +29,22 @@ class Nodo:
         self.color = BLANCO
         self.ancho = ancho
         self.total_filas = total_filas
+
+        # VARIABLES PARA A*
+        self.g = float("inf")  #Costo par amoverse
+        self.h = 0      #Variable para la distancia hacia la salida
+        self.f = float("inf")  # para la suma g+h y determinar a donde debe moverse
+        self.padre = None   #PAra guardar el nodo previo de donde viene
+        self.contador = 0   #Variable para el orden de movimientos
+
+
+    # Función para actualizar los atributos
+    def actualizar_costos(self, g, h, padre, contador):
+        self.g = g  # nuevo costo
+        self.h = h  # nueva heurística
+        self.f = g + h  # nuevo valor total
+        self.padre = padre  # nodo del que viene
+        self.contador = contador  # contador de movimientos
 
     def get_pos(self):
         return self.fila, self.col
@@ -38,6 +60,12 @@ class Nodo:
 
     def restablecer(self):
         self.color = BLANCO
+        # tambien hay que restablecer el nodo a neutro
+        self.g = float("inf")
+        self.h = 0
+        self.f = float("inf")
+        self.padre = None
+        self.contador = 0
 
     def hacer_inicio(self):
         self.color = NARANJA
@@ -48,8 +76,107 @@ class Nodo:
     def hacer_fin(self):
         self.color = PURPURA
 
+    def hacer_cerrado(self): 
+        self.color = ROJO
+
+    def hacer_abierto(self):  # para pintar la casilla cuando entra a la lista abierta
+        self.color = AZUL
+
+    def hacer_camino(self):  
+        self.color = VERDE
+
+    def __lt__(self, otro):  # Método para comparar nodos
+        return self.f < otro.f
+
     def dibujar(self, ventana):
         pygame.draw.rect(ventana, self.color, (self.x, self.y, self.ancho, self.ancho))
+
+        # pintar los valores de g h y f
+        if self.g != float("inf") or self.h !=0:
+            textoG = FUENTE.render(f"G:{self.g:.1f}", True, NEGRO)
+            textoH = FUENTE.render(f"H:{self.h:.1f}", True, NEGRO)
+            textoF = FUENTE.render(f"F:{self.f:.1f}", True, NEGRO)
+            ventana.blit(textoG, (self.x + 2, self.y + 2))
+            ventana.blit(textoH, (self.x + 2, self.y + 15))
+            ventana.blit(textoF, (self.x + 2, self.y + 28))
+
+
+# Función para obtener la distancia hacia la salida
+def heuristica(pos1, pos2):
+    x1, y1 = pos1
+    x2, y2 = pos2
+    return abs(x1 - x2) + abs(y1 - y2)
+
+# Función para obtener las casillas cercanas incluyendo las casillas en diagonal
+def obtener_cercanas(nodo, grid):
+    filas = nodo.total_filas
+    listaAbierta = []
+
+    #Costo de los movimientos
+    movimientos = [
+        (-1, 0, 1), (1, 0, 1),          #movimientos verticales
+        (0, -1, 1), (0, 1, 1),          #movimientos horizontal
+        (-1, -1, 1.4), (-1, 1, 1.4),    #movimientos en diagonal
+        (1, -1, 1.4), (1, 1, 1.4)
+    ]
+
+    for df, dc, costo in movimientos:
+        nf = nodo.fila + df
+        nc = nodo.col + dc
+        if 0 <= nf < filas and 0 <= nc < filas:
+            vecino = grid[nf][nc]
+            if not vecino.es_pared():  # ignora paredes como casilla valida
+                listaAbierta.append((vecino, costo))
+    return listaAbierta
+
+def reconstruir_camino(nodo_actual, ventana, grid, filas, ancho):
+    # traza el camino calculado por el algoritmo
+    while nodo_actual.padre is not None:
+        nodo_actual.hacer_camino()
+        nodo_actual = nodo_actual.padre
+        dibujar(ventana, grid, filas, ancho)  # actualiza el tablero
+
+# ALGORITMO A*
+def aEstrella(grid, inicio, fin, ventana, ancho):
+    # implementación del algoritmo a*
+    open_set = PriorityQueue()
+    open_set.put((inicio.f, inicio))  # inicia con el nodo de inicio
+    visitados = set()
+    contador = 1
+    
+    # inicializa nodo inicial
+    inicio.actualizar_costos(0, heuristica(inicio.get_pos(), fin.get_pos()), None, contador)
+    
+    while not open_set.empty():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return False
+        
+        nodo_actual = open_set.get()[1]  # obtiene nodo con menor f
+        
+        if nodo_actual == fin:
+            reconstruir_camino(fin, ventana, grid, len(grid), ancho)
+            return True
+        
+        for vecino, costo in obtener_cercanas(nodo_actual, grid):
+            nuevo_g = nodo_actual.g + costo
+            if nuevo_g < vecino.g:  # encuentra mejor camino
+                contador += 1
+                nuevo_h = heuristica(vecino.get_pos(), fin.get_pos())
+                vecino.actualizar_costos(nuevo_g, nuevo_h, nodo_actual, contador)
+                if vecino not in visitados:
+                    open_set.put((vecino.f, vecino))
+                    visitados.add(vecino)
+                vecino.hacer_abierto()
+        
+        if nodo_actual != inicio:
+            nodo_actual.hacer_cerrado()
+        
+        dibujar(ventana, grid, len(grid), ancho)
+        pygame.time.delay(300)  # pausa para visualización
+    
+    return False  # no hay camino
 
 def crear_grid(filas, ancho):
     grid = []
@@ -113,6 +240,15 @@ def main(ventana, ancho):
 
                 elif nodo != fin and nodo != inicio:
                     nodo.hacer_pared()
+            
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE and inicio and fin:
+                    # Resetear nodos previos
+                    for fila in grid:
+                        for nodo in fila:
+                            if nodo.color == VERDE or nodo.color == ROJO or nodo.color == AZUL:
+                                nodo.restablecer()
+                    aEstrella(grid, inicio, fin, ventana, ancho)
 
             elif pygame.mouse.get_pressed()[2]:  # Click derecho
                 pos = pygame.mouse.get_pos()
