@@ -1,5 +1,5 @@
 import pygame
-from queue import PriorityQueue # Para añadir a cola
+from queue import PriorityQueue 
 
 # Configuraciones iniciales
 ANCHO_VENTANA = 600
@@ -34,7 +34,7 @@ class Nodo:
         self.g = float("inf")  #Costo par amoverse
         self.h = 0      #Variable para la distancia hacia la salida
         self.f = float("inf")  # para la suma g+h y determinar a donde debe moverse
-        self.padre = None   #PAra guardar el nodo previo de donde viene
+        self.padre = None   #PAra guardar el nodo de donde viene
         self.contador = 0   #Variable para el orden de movimientos
 
 
@@ -120,11 +120,11 @@ def obtener_cercanas(nodo, grid):
         (1, -1, 1.4), (1, 1, 1.4)
     ]
 
-    for df, dc, costo in movimientos:
-        nf = nodo.fila + df
-        nc = nodo.col + dc
-        if 0 <= nf < filas and 0 <= nc < filas:
-            vecino = grid[nf][nc]
+    for cambioFila, cambioColumna, costo in movimientos:
+        nuevaFila = nodo.fila + cambioFila
+        nuevaColumna = nodo.col + cambioColumna
+        if 0 <= nuevaFila < filas and 0 <= nuevaColumna < filas:
+            vecino = grid[nuevaFila][nuevaColumna]
             if not vecino.es_pared():  # ignora paredes como casilla valida
                 listaAbierta.append((vecino, costo))
     return listaAbierta
@@ -144,7 +144,7 @@ def aEstrella(grid, inicio, fin, ventana, ancho):
     visitados = set()
     contador = 1
     
-    # inicializa nodo inicial
+    # bucle donde se analiza cada nodo
     inicio.actualizar_costos(0, heuristica(inicio.get_pos(), fin.get_pos()), None, contador)
     
     while not open_set.empty():
@@ -153,20 +153,20 @@ def aEstrella(grid, inicio, fin, ventana, ancho):
                 pygame.quit()
                 return False
         
-        nodo_actual = open_set.get()[1]  # obtiene nodo con menor f
+        nodo_actual = open_set.get()[1]  # obtiene menor f
         
         if nodo_actual == fin:
             reconstruir_camino(fin, ventana, grid, len(grid), ancho)
             return True
         
         for vecino, costo in obtener_cercanas(nodo_actual, grid):
-            nuevo_g = nodo_actual.g + costo
-            if nuevo_g < vecino.g:  # encuentra mejor camino
+            nuevo_g = nodo_actual.g + costo #calcular el nuevo costo
+            if nuevo_g < vecino.g:  # si es mejor que el anterior
                 contador += 1
                 nuevo_h = heuristica(vecino.get_pos(), fin.get_pos())
                 vecino.actualizar_costos(nuevo_g, nuevo_h, nodo_actual, contador)
                 if vecino not in visitados:
-                    open_set.put((vecino.f, vecino))
+                    open_set.put((vecino.f, vecino)) #añadir a la cola
                     visitados.add(vecino)
                 vecino.hacer_abierto()
         
@@ -174,7 +174,7 @@ def aEstrella(grid, inicio, fin, ventana, ancho):
             nodo_actual.hacer_cerrado()
         
         dibujar(ventana, grid, len(grid), ancho)
-        pygame.time.delay(300)  # pausa para visualización
+        pygame.time.delay(300)  # hacer más lento para ver funcionamiento
     
     return False  # no hay camino
 
@@ -212,7 +212,7 @@ def obtener_click_pos(pos, filas, ancho):
     return fila, col
 
 def main(ventana, ancho):
-    FILAS = 10
+    FILAS = 11
     grid = crear_grid(FILAS, ancho)
 
     inicio = None
