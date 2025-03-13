@@ -59,13 +59,14 @@ class Nodo:
         return self.color == PURPURA
 
     def restablecer(self):
-        self.color = BLANCO
-        # tambien hay que restablecer el nodo a neutro
-        self.g = float("inf")
-        self.h = 0
-        self.f = float("inf")
-        self.padre = None
-        self.contador = 0
+        if not self.es_inicio() and not self.es_fin():
+            self.color = BLANCO
+            # tambien hay que restablecer el nodo a neutro
+            self.g = float("inf")
+            self.h = 0
+            self.f = float("inf")
+            self.padre = None
+            self.contador = 0
 
     def hacer_inicio(self):
         self.color = NARANJA
@@ -76,11 +77,14 @@ class Nodo:
     def hacer_fin(self):
         self.color = PURPURA
 
-    def hacer_cerrado(self): 
-        self.color = ROJO
+    def hacer_cerrado(self):
+        if not self.es_inicio() and not self.es_fin():
+            self.color = ROJO
 
-    def hacer_abierto(self):  # para pintar la casilla cuando entra a la lista abierta
-        self.color = AZUL
+    # para pintar la casilla cuando entra a la lista abierta
+    def hacer_abierto(self):
+        if not self.es_inicio() and not self.es_fin():
+            self.color = AZUL
 
     def hacer_camino(self):  
         self.color = VERDE
@@ -107,7 +111,7 @@ def heuristica(pos1, pos2):
     x2, y2 = pos2
     return abs(x1 - x2) + abs(y1 - y2)
 
-# Función para obtener las casillas cercanas incluyendo las casillas en diagonal
+# Función para obtener las casillas cercanas 
 def obtener_cercanas(nodo, grid):
     filas = nodo.total_filas
     listaAbierta = []
@@ -138,45 +142,69 @@ def reconstruir_camino(nodo_actual, ventana, grid, filas, ancho):
 
 # ALGORITMO A*
 def aEstrella(grid, inicio, fin, ventana, ancho):
-    # implementación del algoritmo a*
     open_set = PriorityQueue()
-    open_set.put((inicio.f, inicio))  # inicia con el nodo de inicio
-    visitados = set()
-    contador = 1
+    open_set.put((0, inicio))
+    casillaAnterior = {}
+    g_score = {nodo: float("inf") for fila in grid for nodo in fila}
+    g_score[inicio] = 0
+    f_score = {nodo: float("inf") for fila in grid for nodo in fila}
+    f_score[inicio] = heuristica(inicio.get_pos(), fin.get_pos())
     
-    # bucle donde se analiza cada nodo
-    inicio.actualizar_costos(0, heuristica(inicio.get_pos(), fin.get_pos()), None, contador)
-    
+    open_set_hash = {inicio}
+    cerrados = set()
+
+    # Actualizar valores iniciales del nodo
+    inicio.actualizar_costos(
+        g_score[inicio],
+        heuristica(inicio.get_pos(), fin.get_pos()),
+        None,
+        1
+    )
+
     while not open_set.empty():
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return False
-        
-        nodo_actual = open_set.get()[1]  # obtiene menor f
+        nodo_actual = open_set.get()[1]
+        cerrados.add(nodo_actual)
         
         if nodo_actual == fin:
-            reconstruir_camino(fin, ventana, grid, len(grid), ancho)
+            # Reconstruir camino usando casillaAnterior
+            while nodo_actual in casillaAnterior:
+                nodo_actual = casillaAnterior[nodo_actual]
+                nodo_actual.hacer_camino()
+                dibujar(ventana, grid, len(grid), ancho)
             return True
-        
+
+        if nodo_actual in open_set_hash:
+            open_set_hash.remove(nodo_actual)
+
         for vecino, costo in obtener_cercanas(nodo_actual, grid):
-            nuevo_g = nodo_actual.g + costo #calcular el nuevo costo
-            if nuevo_g < vecino.g:  # si es mejor que el anterior
-                contador += 1
-                nuevo_h = heuristica(vecino.get_pos(), fin.get_pos())
-                vecino.actualizar_costos(nuevo_g, nuevo_h, nodo_actual, contador)
-                if vecino not in visitados:
-                    open_set.put((vecino.f, vecino)) #añadir a la cola
-                    visitados.add(vecino)
-                vecino.hacer_abierto()
-        
-        if nodo_actual != inicio:
-            nodo_actual.hacer_cerrado()
-        
+            if vecino in cerrados:
+                continue
+
+            tentative_g = g_score[nodo_actual] + costo
+            
+            if tentative_g < g_score[vecino]:
+                casillaAnterior[vecino] = nodo_actual
+                g_score[vecino] = tentative_g
+                f_score[vecino] = tentative_g + heuristica(vecino.get_pos(), fin.get_pos())
+                
+                # Actualizar atributos del nodo
+                vecino.actualizar_costos(
+                    g_score[vecino],
+                    heuristica(vecino.get_pos(), fin.get_pos()),
+                    nodo_actual,
+                    vecino.contador + 1
+                )
+
+                if vecino not in open_set_hash:
+                    open_set.put((f_score[vecino], vecino))
+                    open_set_hash.add(vecino)
+                    vecino.hacer_abierto()
+
+        nodo_actual.hacer_cerrado()
         dibujar(ventana, grid, len(grid), ancho)
-        pygame.time.delay(300)  # hacer más lento para ver funcionamiento
-    
-    return False  # no hay camino
+        pygame.time.delay(250)
+
+    return False
 
 def crear_grid(filas, ancho):
     grid = []
