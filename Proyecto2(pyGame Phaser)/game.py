@@ -1,5 +1,12 @@
 import pygame
 import random
+import os
+import pandas as pd
+import joblib
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+import joblib #* para guardar el modelo
 
 # Inicializar Pygame
 pygame.init()
@@ -35,9 +42,101 @@ modo_auto = False  # Indica si el modo de juego es automático
 # Lista para guardar los datos de velocidad, distancia y salto (target)
 datos_modelo = []
 
-# Cargar las imágenes
-import os
+#* variables para el modelo
+modeloRedNeuronal = None
+escalador = None
+modeloEntrenado = False
+ARCHIVO_MODELO = 'modeloJuego.pkl'
+ARCHIVO_ESCALADOR = 'escaladorJuego.pkl'
 
+#* funcionalidad del modelo
+def cargarModeloEntrenado():
+    global modeloRedNeuronal, escalador, modeloEntrenado
+
+    try:
+        modeloRedNeuronal = joblib.load(ARCHIVO_MODELO)
+        escalador = joblib.load(ARCHIVO_ESCALADOR)
+        modeloEntrenado=True
+        print("Modelo cargado")
+    except FileNotFoundError:
+        print("No se encontro el modelo, entrena en modo manual")
+        modeloEntrenado=False
+
+#* Entrenar el modelo y guardar en joblib
+def entrenarModelo():
+    global modeloRedNeuronal, escalador, modeloEntrenado
+
+    print("Entrenando modelo...")
+
+    #* procesamiento
+    df = pd.DataFrame(datos_modelo, columns=['velocidad_bala', 'distancia', 'salto'])
+    X = df[['velocidad_bala', 'distancia']] 
+    y = df['salto']
+    
+    #* escalar las características
+    escalador = MinMaxScaler()
+    X_escalado = escalador.fit_transform(X)
+
+    # Entrenamiento de modelo
+    modeloRedNeuronal = Sequential([
+        Dense(8, activation='relu', input_shape=(2,)),
+        Dense(1, activation='sigmoid')
+    ]) 
+    #* compilar el modelo
+    modeloRedNeuronal.compile(
+        optimizer='adam', 
+        loss='binary_crossentropy', 
+        metrics=['accuracy']
+    )
+
+    #* entrenamiento
+    modeloRedNeuronal.fit(
+        X_escalado, y,
+        epochs = 30,
+        batch_size = 8,
+        verbose = 1
+    )
+
+    #* guardar el modelo
+    joblib.dump(modeloRedNeuronal, ARCHIVO_MODELO)
+    joblib.dump(escalador, ARCHIVO_ESCALADOR)
+    modeloEntrenado = True
+    print("Modelo entrenado y guardado")
+    
+    return True
+
+#* función para predecir salto
+def predecirSalto():
+    global jugador, bala, velocidad_bala
+    distancia = abs(jugador.x - bala.x)
+    
+    entrada = pd.DataFrame([[velocidad_bala, distancia]], 
+                         columns=['velocidad_bala', 'distancia'])
+    try: 
+        entrada_esc = escalador.transform(entrada)
+        return modeloRedNeuronal.predict(entrada_esc, verbose=0)[0][0]
+    except Exception as e:
+        print("Error al predecir:", e)
+        return 0.0
+
+#* modificar el modo auto
+def modoAutoRed():
+    global salto, en_suelo
+    
+    if not modeloEntrenado or not escalador:
+        print("¡Entrena el modelo primero!")
+        return
+    
+    if en_suelo:
+        prob = predecirSalto()
+        print(f"Probabilidad de salto: {prob}", end='\r')
+        if prob > 0.49:  # Umbral más bajo
+            salto = True
+            en_suelo = False
+        
+
+
+# Cargar las imágenes
 base_path = os.path.dirname(__file__)
 
 jugador_frames = [
@@ -170,8 +269,8 @@ def pausa_juego():
 def mostrar_menu():
     global menu_activo, modo_auto
     pantalla.fill(NEGRO)
-    texto = fuente.render("Presiona 'A' para Auto, 'M' para Manual, o 'Q' para Salir", True, BLANCO)
-    pantalla.blit(texto, (w // 4, h // 2))
+    texto = fuente.render("Presiona 'A' para Auto, 'M' para Manual, 'T' para entrenar el modelo, o 'Q' para Salir", True, BLANCO)
+    pantalla.blit(texto, (w // 6, h // 3))
     pygame.display.flip()
 
     while menu_activo:
@@ -181,11 +280,17 @@ def mostrar_menu():
                 exit()
             if evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_a:
-                    modo_auto = True
-                    menu_activo = False
+                    if modeloEntrenado:
+                        modo_auto = True
+                        menu_activo = False
+                    else :
+                        print("Entrena primero el modelo jugando en manual o presiona 'T' ")
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     menu_activo = False
+                elif evento.key == pygame.K_t:
+                    entrenarModelo()
+                    
                 elif evento.key == pygame.K_q:
                     print("Juego terminado. Datos recopilados:", datos_modelo)
                     pygame.quit()
@@ -207,6 +312,7 @@ def reiniciar_juego():
 
 def main():
     global salto, en_suelo, bala_disparada
+    cargarModeloEntrenado()
 
     reloj = pygame.time.Clock()
     mostrar_menu()  # Mostrar el menú al inicio
@@ -234,7 +340,19 @@ def main():
                     manejar_salto()
                 # Guardar los datos si estamos en modo manual
                 guardar_datos()
-
+            #* modo auto
+            if modo_auto:
+                if modeloEntrenado:
+                    modoAutoRed()
+                    if salto:
+                        manejar_salto()
+            
+            if not pausa:
+                if modo_auto:
+                    if modeloEntrenado:
+                        modoAutoRed()
+                    else:
+                        print("Entrena primero el modelo jugando en manual")
             # Actualizar el juego
             if not bala_disparada:
                 disparar_bala()
