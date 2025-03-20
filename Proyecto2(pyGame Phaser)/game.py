@@ -48,6 +48,9 @@ escalador = None
 modeloEntrenado = False
 ARCHIVO_MODELO = 'modeloJuego.pkl'
 ARCHIVO_ESCALADOR = 'escaladorJuego.pkl'
+#! mejora rendimiento
+ULTIMA_PREDICCION = 0  # Tiempo de la última predicción
+INTERVALO_PREDICCION = 0.2  # Segundos entre predicciones (5 veces/segundo)
 
 #* funcionalidad del modelo
 def cargarModeloEntrenado():
@@ -121,18 +124,20 @@ def predecirSalto():
 
 #* modificar el modo auto
 def modoAutoRed():
-    global salto, en_suelo
-    
-    if not modeloEntrenado or not escalador:
-        print("¡Entrena el modelo primero!")
-        return
-    
-    if en_suelo:
-        prob = predecirSalto()
-        print(f"Probabilidad de salto: {prob}", end='\r')
-        if prob > 0.49:  # Umbral más bajo
-            salto = True
-            en_suelo = False
+    global salto, en_suelo, ULTIMA_PREDICCION
+    tiempoActual = pygame.time.get_ticks() / 1000
+    if (tiempoActual - ULTIMA_PREDICCION) > INTERVALO_PREDICCION:
+        if not modeloEntrenado or not escalador:
+            print("Modelo no entrenado, juega en modo manual")
+            return
+        
+        if en_suelo:
+            prob = predecirSalto()
+            print(f"Probabilidad de salto: {prob}", end='\r')
+            if prob > 0.49:  # Umbral más bajo
+                salto = True
+                en_suelo = False
+        ULTIMA_PREDICCION = tiempoActual
         
 
 
