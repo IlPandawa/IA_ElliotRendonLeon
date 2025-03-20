@@ -1,13 +1,10 @@
 import numpy as np
 import cv2 as cv
 import math 
-import os
 
-base_path = os.path.dirname(__file__)
-
-rostro = cv.CascadeClassifier(os.path.join(base_path,'haarcascade_frontalface_alt.xml'))
+rostro = cv.CascadeClassifier(r'C:\InteligenciaArtificial\IA_ElliotRendonLeon\actividad4_Haarcascade\haarcascade_frontalface_alt.xml')
 cap = cv.VideoCapture(0)
-i = 0  
+i = 198001
 while True:
     ret, frame = cap.read()
     gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
@@ -19,10 +16,9 @@ while True:
        frame2 = cv.resize(frame2, (100, 100), interpolation=cv.INTER_AREA)
        
         
-       ruta = os.path.join('actividad4_Haarcascade\elliot', f'elliot{i}.jpg')
-       if i%30 == 0:
-        cv.imwrite(ruta, frame)
-       cv.imshow('rostror', frame2)
+       if(i%30==0):
+        cv.imwrite('C:\\InteligenciaArtificial\\IA_ElliotRendonLeon\\actividad4_Haarcascade\\elliot\\elliotito'+str(i)+'.jpg', frame2)
+        cv.imshow('rostror', frame2)
     cv.imshow('rostros', frame)
     i = i+1
     k = cv.waitKey(1)
