@@ -12,5 +12,16 @@ Además para la detección se deben de evaluar la distancia o posición de los p
 + Cejas: si los puntos detectados estan arriba o abajo y además si están cerca (ceño fruncido)
 + Ojos: dependiendo de la distancia de apertura de los parpados puede indicar sorpresa o enojo
 
+```
+# Puntos faciales clave para detección
+# Puntos para los párpados
+puntosParpadoSup = [159, 145, 386, 374]  # Párpados superiores
+puntosParpadoInf = [158, 153, 385, 373]  # Párpados inferiores
 
+# Ojos, cejas, nariz y boca
+puntosOjos = [33, 133, 362, 263, 159, 145, 386, 374]  # Contorno de ojos
+puntosCejas = [65, 66, 70, 105, 107, 336, 296, 334]   # Puntos de cejas
+puntosBoca = [61, 291, 0, 17, 13, 14, 78, 308]       # Contorno de boca
+puntosNariz = [1, 2, 98, 327]                        # Puente y punta de la nariz
+```
 
