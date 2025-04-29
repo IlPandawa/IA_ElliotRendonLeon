@@ -22,7 +22,7 @@ while cap.isOpened():
     if not ret:
         break
 
-    frame = cv2.flip(frame, 1)  # Espejo para mayor naturalidad
+    frame = cv2.flip(frame, 1)  # Espejo 
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_mesh.process(rgb_frame)
 
@@ -34,9 +34,9 @@ while cap.isOpened():
                 x = int(face_landmarks.landmark[idx].x * frame.shape[1])
                 y = int(face_landmarks.landmark[idx].y * frame.shape[0])
                 puntos[idx] = (x, y)
-                cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)  # Dibuja el punto en verde
+                cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)
             
-            # Calcular y mostrar distancia entre puntos (ejemplo: entre ojos)
+            # Calcular y mostrar distancia entre puntos
             if 33 in puntos and 133 in puntos:
                 d_ojoIzq = distancia(puntos[33], puntos[133])
                 d_ojoDer = distancia(puntos[362], puntos[263])

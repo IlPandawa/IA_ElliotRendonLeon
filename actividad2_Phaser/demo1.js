@@ -176,7 +176,7 @@ function update() {
             'output':  [estatusAire, estatuSuelo ]  
         });
 
-        console.log(despBala, + " " +velocidadBala, + " "+ estatusAire,+" "+  estatuSuelo);
+        console.log(despBala, + " " +velocidadBala, + " "+ estatusAire);
    }
 
 }
