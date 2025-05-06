@@ -4,7 +4,7 @@ from sklearn.tree import DecisionTreeClassifier, export_graphviz
 import graphviz
 
 # Cargar el dataset
-file_path = 'phaser.csv'
+file_path = 'C:\\InteligenciaArtificial\\IA_ElliotRendonLeon\\actividad6_decisionTreePhaser\\phaser3.csv'
 dataset = pd.read_csv(file_path)
 
 # Eliminar columnas innecesarias (como la vacía "Unnamed: 3")
