@@ -28,6 +28,7 @@ clf.fit(X_train, y_train)
 y_predict = clf.predict(X_test)
 
 print(X_test, y_predict)
+
 # Exportar el árbol de decisión en formato DOT para su visualización
 dot_data = export_graphviz(clf, out_file=None, 
                            feature_names=['Feature 1', 'Feature 2'],  
