@@ -3,9 +3,20 @@ import random
 import os
 import time
 from redNeuronal import (
-    cargar_modelo_salto, cargar_modelo_movimiento, 
-    entrenar_modelo_salto, entrenar_modelo_movimiento,
-    predecir_salto, predecir_movimiento
+    cargarRedSalto, cargarRedMovimiento, 
+    entrenarRedSalto, entrenarRedMovimiento,
+    pronosticarSalto, pronosticarMovimiento
+)
+
+from decisionTree import (
+    cargar_modelo_salto_dt, cargar_modelo_movimiento_dt,
+    entrenar_modelo_salto_dt, entrenar_modelo_movimiento_dt,
+    predecir_salto_dt, predecir_movimiento_dt
+)
+from knn import (
+    cargar_modelo_salto_knn, cargar_modelo_movimiento_knn,
+    entrenar_modelo_salto_knn, entrenar_modelo_movimiento_knn,
+    predecir_salto_knn, predecir_movimiento_knn
 )
 
 # Inicializar Pygame
@@ -56,6 +67,21 @@ datos_movimiento = []
 modelo_salto_cargado = False
 modelo_movimiento_cargado = False
 
+modelos_cargados = {
+    "nn": {
+        "salto": False,
+        "movimiento": False
+    },
+    "dt": {
+        "salto": False,
+        "movimiento": False
+    },
+    "knn": {
+        "salto": False,
+        "movimiento": False
+    }
+}
+
 # Variables para control de predicciones
 INTERVALO_PREDICCION = 0.2  # Segundos entre predicciones
 ultima_prediccion_salto = 0
@@ -68,16 +94,18 @@ velocidad_bala_vertical = 4
 bala_vertical_disparada = False
 tiempo_ultimo_disparo = 0
 
-# Intentar cargar modelos previamente entrenados
-modelo_salto_cargado = cargar_modelo_salto()
-modelo_movimiento_cargado = cargar_modelo_movimiento()
+# cargar modelos entrenados
+modelos_cargados["nn"]["salto"] = cargarRedSalto()
+modelos_cargados["nn"]["movimiento"] = cargarRedMovimiento()
+modelos_cargados["dt"]["salto"] = cargar_modelo_salto_dt()
+modelos_cargados["dt"]["movimiento"] = cargar_modelo_movimiento_dt()
+modelos_cargados["knn"]["salto"] = cargar_modelo_salto_knn()
+modelos_cargados["knn"]["movimiento"] = cargar_modelo_movimiento_knn()
 
 # Cargar las imágenes
 base_path = os.path.dirname(__file__)
 
-# Verificar existencia de imágenes y cargar usando rutas alternativas si es necesario
 try:
-    # Primero intenta usar el path original
     jugador_frames = [
         pygame.image.load(os.path.join(base_path, 'assets/sprites/mono_frame_1.png')),
         pygame.image.load(os.path.join(base_path, 'assets/sprites/mono_frame_2.png')),
@@ -88,7 +116,6 @@ try:
     fondo_img = pygame.image.load(os.path.join(base_path, 'assets/game/fondo2.png'))
     nave_img = pygame.image.load(os.path.join(base_path, 'assets/game/ufo.png'))
 except FileNotFoundError:
-    # Usar imágenes alternativas del directorio pygamesc
     try:
         jugador_frames = [
             pygame.transform.scale(pygame.image.load(r'pygamesc\assets\sprites\M\M0.png'), (44, 55)),
@@ -100,7 +127,6 @@ except FileNotFoundError:
         fondo_img = pygame.image.load(r'pygamesc\assets\game\fondo2.png')
         nave_img = pygame.image.load(r'pygamesc\assets\game\bowser.png')
     except FileNotFoundError:
-        # Crear imágenes de respaldo como último recurso
         jugador_frames = [pygame.Surface((32, 48)) for _ in range(4)]
         for frame in jugador_frames:
             frame.fill(AZUL)
@@ -129,7 +155,6 @@ frame_count = 0
 fondo_x1 = 0
 fondo_x2 = w
 
-# ---------------- FUNCIONES DEL JUEGO ----------------
 
 def disparar_bala():
     """Inicia el disparo de la bala horizontal"""
@@ -174,23 +199,25 @@ def manejar_salto():
             en_suelo = True
 
 def mover_jugador_manual():
-    """Maneja el movimiento del jugador en modo manual"""
+    """Maneja el movimiento del jugador en modo manual y registra la intención de movimiento"""
     global jugador, pos_actual
     keys = pygame.key.get_pressed()
 
-    # Movimiento horizontal
-    if keys[pygame.K_LEFT] and jugador.x > pos_x_min:
-        jugador.x -= velocidad_x
-        pos_actual = 0
-    elif keys[pygame.K_RIGHT] and jugador.x < pos_x_max:
-        jugador.x += velocidad_x
-        pos_actual = 2
+    if keys[pygame.K_LEFT]:
+        pos_actual = 0  # Intención: moverse a la izquierda
+    elif keys[pygame.K_RIGHT]:
+        pos_actual = 2  # Intención: moverse a la derecha
     else:
-        pos_actual = 1
+        pos_actual = 1  # Intención: quedarse quieto
+
+    # Luego, movemos al jugador solo si está dentro de los límites
+    if pos_actual == 0 and jugador.x > pos_x_min:
+        jugador.x -= velocidad_x
+    elif pos_actual == 2 and jugador.x < pos_x_max:
+        jugador.x += velocidad_x
 
 def aplicar_ia():
-    """Aplica decisiones de la IA para el movimiento y salto del jugador"""
-    global salto, en_suelo, jugador, pos_actual, ultima_prediccion_salto, ultima_prediccion_movimiento
+    global salto, en_suelo, jugador, pos_actual, ultima_prediccion_salto, ultima_prediccion_movimiento, tipo_modelo
     
     tiempo_actual = time.time()
     
@@ -198,42 +225,68 @@ def aplicar_ia():
     if tiempo_actual - ultima_prediccion_salto > INTERVALO_PREDICCION:
         if en_suelo and bala_disparada:
             distancia = abs(jugador.x - bala.x)
-            prob_salto = predecir_salto(velocidad_bala, distancia)
-            print(f"Probabilidad de salto: {prob_salto:.2f}", end='\r')
+            
+            # Usar el modelo seleccionado para la predicción de salto
+            if tipo_modelo == "nn":
+                prob_salto = pronosticarSalto(velocidad_bala, distancia)
+            elif tipo_modelo == "dt":
+                prob_salto = predecir_salto_dt(velocidad_bala, distancia)
+            elif tipo_modelo == "knn":
+                prob_salto = predecir_salto_knn(velocidad_bala, distancia)
+            else:
+                prob_salto = 0.0
+                
+            print(f"Probabilidad de salto ({tipo_modelo}): {prob_salto:.2f}", end='\r')
             
             if prob_salto > 0.5:
                 salto = True
                 en_suelo = False
-                print("IA: ¡Saltar!")
+                print(f"IA ({tipo_modelo}): ¡Saltar!")
         
         ultima_prediccion_salto = tiempo_actual
     
     # Decidir movimiento horizontal (para evitar bala vertical)
     if tiempo_actual - ultima_prediccion_movimiento > INTERVALO_PREDICCION:
         if bala_vertical_disparada:
-            accion = predecir_movimiento(
-                jugador.x, jugador.y,
-                bala_vertical.x, bala_vertical.y,
-                bala_vertical_disparada
-            )
+            # Usar el modelo seleccionado para la predicción de movimiento
+            if tipo_modelo == "nn":
+                accion = pronosticarMovimiento(
+                    jugador.x, jugador.y,
+                    bala_vertical.x, bala_vertical.y,
+                    bala_vertical_disparada
+                )
+            elif tipo_modelo == "dt":
+                accion = predecir_movimiento_dt(
+                    jugador.x, jugador.y,
+                    bala_vertical.x, bala_vertical.y,
+                    bala_vertical_disparada
+                )
+            elif tipo_modelo == "knn":
+                accion = predecir_movimiento_knn(
+                    jugador.x, jugador.y,
+                    bala_vertical.x, bala_vertical.y,
+                    bala_vertical_disparada
+                )
+            else:
+                accion = 1  # Por defecto, quedarse quieto
             
-            # Aplicar la decisión de movimiento
+            # decisión de movimiento
             if accion == 0 and jugador.x > pos_x_min:  # Mover izquierda
                 jugador.x -= velocidad_x
                 pos_actual = 0
-                print("IA: Mover izquierda")
+                print(f"IA ({tipo_modelo}): Mover izquierda")
             elif accion == 2 and jugador.x < pos_x_max:  # Mover derecha
                 jugador.x += velocidad_x
                 pos_actual = 2
-                print("IA: Mover derecha")
+                print(f"IA ({tipo_modelo}): Mover derecha")
             else:
                 pos_actual = 1
-                print("IA: Quieto")
+                print(f"IA ({tipo_modelo}): Quieto")
         
         ultima_prediccion_movimiento = tiempo_actual
 
+
 def guardar_datos():
-    """Guarda los datos para el entrenamiento de los modelos"""
     global jugador, bala, bala_vertical, velocidad_bala, salto, pos_actual
     
     # Datos para el modelo de salto
@@ -256,7 +309,6 @@ def guardar_datos():
         ))
 
 def update():
-    """Actualiza el estado del juego y dibuja en pantalla"""
     global bala, bala_vertical, current_frame, frame_count, fondo_x1, fondo_x2
     global tiempo_ultimo_disparo, bala_vertical_disparada
     
@@ -315,7 +367,6 @@ def update():
         reiniciar_juego()
 
 def pausa_juego():
-    """Pausar o reanudar el juego"""
     global pausa
     pausa = not pausa
     if pausa:
@@ -326,33 +377,29 @@ def pausa_juego():
         print("Juego reanudado.")
 
 def mostrar_menu():
-    """Muestra el menú principal del juego"""
-    global menu_activo, modo_auto
+    global menu_activo, modo_auto, tipo_modelo
     
     pantalla.fill(NEGRO)
     
     # Título
-    titulo = fuente.render("Phaser", True, BLANCO)
-    pantalla.blit(titulo, (w // 4, h // 4))
+    titulo = fuente.render("Phaser Modelos", True, BLANCO)
+    pantalla.blit(titulo, (w // 4, 30))
     
     # Opciones de menú
+    y_pos = 100
     opciones = [
-        "Presiona 'M' para Modo Manual",
-        "Presiona 'A' para Modo Automático (IA)",
-        "Presiona 'T' para Entrenar Modelos",
-        "Presiona 'Q' para Salir"
+        {"texto": "Modo Manual (recolectar datos)", "tecla": "M", "color": BLANCO},
+        {"texto": "Modo Automático - Red Neuronal", "tecla": "1", "color": BLANCO},
+        {"texto": "Modo Automático - Árbol de Decisión", "tecla": "2", "color": BLANCO},
+        {"texto": "Modo Automático - KNN", "tecla": "3", "color": BLANCO},
+        {"texto": "Entrenar Modelos", "tecla": "T", "color": BLANCO},
+        {"texto": "Salir", "tecla": "Q", "color": BLANCO}
     ]
     
-    for i, opcion in enumerate(opciones):
-        texto = fuente.render(opcion, True, BLANCO)
-        pantalla.blit(texto, (w // 4, h // 3 + i * 30))
-    
-    # Estado de modelos
-    estado_salto = "Cargado" if modelo_salto_cargado else "No entrenado"
-    estado_mov = "Cargado" if modelo_movimiento_cargado else "No entrenado"
-    
-    estado = fuente.render(f"Modelo Salto: {estado_salto} | Modelo Movimiento: {estado_mov}", True, VERDE if modelo_salto_cargado and modelo_movimiento_cargado else ROJO)
-    pantalla.blit(estado, (w // 4, h // 3 + len(opciones) * 30 + 20))
+    for opcion in opciones:
+        texto = fuente.render(f"{opcion['tecla']} - {opcion['texto']}", True, opcion['color'])
+        pantalla.blit(texto, (w // 4, y_pos))
+        y_pos += 40
     
     pygame.display.flip()
 
@@ -366,13 +413,30 @@ def mostrar_menu():
                     modo_auto = False
                     menu_activo = False
                     print("Modo Manual activado")
-                elif evento.key == pygame.K_a:
-                    if modelo_salto_cargado and modelo_movimiento_cargado:
+                elif evento.key == pygame.K_1:  # Red Neuronal
+                    if modelos_cargados["nn"]["salto"] and modelos_cargados["nn"]["movimiento"]:
                         modo_auto = True
+                        tipo_modelo = "nn"
                         menu_activo = False
-                        print("Modo Automático (IA) activado")
+                        print("Modo Automático (Red Neuronal) activado")
                     else:
-                        print("¡Entrena los modelos primero!")
+                        print("¡Entrena primero el modelo de Red Neuronal!")
+                elif evento.key == pygame.K_2:  # Árbol de Decisión
+                    if modelos_cargados["dt"]["salto"] and modelos_cargados["dt"]["movimiento"]:
+                        modo_auto = True
+                        tipo_modelo = "dt"
+                        menu_activo = False
+                        print("Modo Automático (Árbol de Decisión) activado")
+                    else:
+                        print("¡Entrena primero el modelo de Árbol de Decisión!")
+                elif evento.key == pygame.K_3:  # KNN
+                    if modelos_cargados["knn"]["salto"] and modelos_cargados["knn"]["movimiento"]:
+                        modo_auto = True
+                        tipo_modelo = "knn"
+                        menu_activo = False
+                        print("Modo Automático (KNN) activado")
+                    else:
+                        print("¡Entrena primero el modelo KNN!")
                 elif evento.key == pygame.K_t:
                     entrenar_modelos()
                 elif evento.key == pygame.K_q:
@@ -381,51 +445,205 @@ def mostrar_menu():
                     exit()
 
 def entrenar_modelos():
-    """Entrena los modelos con los datos recopilados"""
-    global modelo_salto_cargado, modelo_movimiento_cargado
+    """Muestra un menú para seleccionar qué modelo entrenar"""
+    global modelos_cargados
     
     pantalla.fill(NEGRO)
-    texto = fuente.render("Entrenando modelos...", True, BLANCO)
-    pantalla.blit(texto, (w // 3, h // 2))
+    titulo = fuente.render("Seleccione un modelo para entrenar:", True, BLANCO)
+    
+    opciones = [
+        {"texto": "Red Neuronal", "tecla": "1", "tipo": "nn"},
+        {"texto": "Árbol de Decisión", "tecla": "2", "tipo": "dt"},
+        {"texto": "KNN", "tecla": "3", "tipo": "knn"},
+        {"texto": "Todos los modelos", "tecla": "4", "tipo": "todos"},
+        {"texto": "Volver al menú principal", "tecla": "5", "tipo": None}
+    ]
+    
+    pantalla.blit(titulo, (w // 4, 50))
+    
+    y_pos = 120
+    for opcion in opciones:
+        texto = fuente.render(f"{opcion['tecla']} - {opcion['texto']}", True, BLANCO)
+        pantalla.blit(texto, (w // 4, y_pos))
+        y_pos += 40
+    
     pygame.display.flip()
     
-    # Entrenar modelo de salto
-    if len(datos_salto) >= 10:
-        if entrenar_modelo_salto(datos_salto):
-            modelo_salto_cargado = True
-    else:
+    seleccionando = True
+    while seleccionando:
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_1:  # Red Neuronal
+                    entrenar_modelo_especifico("nn")
+                    seleccionando = False
+                elif evento.key == pygame.K_2:  # Árbol de Decisión
+                    entrenar_modelo_especifico("dt")
+                    seleccionando = False
+                elif evento.key == pygame.K_3:  # KNN
+                    entrenar_modelo_especifico("knn")
+                    seleccionando = False
+                elif evento.key == pygame.K_4:  # Todos los modelos
+                    entrenar_todos_modelos()
+                    seleccionando = False
+                elif evento.key == pygame.K_5:  # Volver
+                    seleccionando = False
+                    mostrar_menu()
+
+def entrenar_modelo_especifico(tipo_modelo):
+    global modelos_cargados
+    
+    pantalla.fill(NEGRO)
+    texto = fuente.render(f"Entrenando modelo {tipo_modelo.upper()}...", True, BLANCO)
+    pantalla.blit(texto, (w // 3, h // 2 - 30))
+    pygame.display.flip()
+    
+    # Verificar datos suficientes
+    if len(datos_salto) < 10:
         texto = fuente.render("No hay suficientes datos de salto", True, ROJO)
+        pantalla.blit(texto, (w // 3, h // 2))
+        pygame.display.flip()
+        pygame.time.delay(2000)
+        mostrar_menu()
+        return
+        
+    if len(datos_movimiento) < 10:
+        texto = fuente.render("No hay suficientes datos de movimiento", True, ROJO)
         pantalla.blit(texto, (w // 3, h // 2 + 30))
         pygame.display.flip()
         pygame.time.delay(2000)
-    
-    # Entrenar modelo de movimiento
-    if len(datos_movimiento) >= 10:
-        if entrenar_modelo_movimiento(datos_movimiento):
-            modelo_movimiento_cargado = True
-    else:
-        texto = fuente.render("No hay suficientes datos de movimiento", True, ROJO)
-        pantalla.blit(texto, (w // 3, h // 2 + 60))
-        pygame.display.flip()
-        pygame.time.delay(2000)
-    
-    # Mostrar resultados
-    pantalla.fill(NEGRO)
-    
-    if modelo_salto_cargado and modelo_movimiento_cargado:
-        texto = fuente.render("¡Modelos entrenados con éxito!", True, VERDE)
-        #delay
-        pygame.time.delay(1000)
         mostrar_menu()
+        return
+    
+    # Entrenar modelo de salto
+    exito_salto = False
+    exito_movimiento = False
+    
+    if tipo_modelo == "nn":
+        texto = fuente.render("Entrenando Red Neuronal (salto)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2))
+        pygame.display.flip()
+        exito_salto = entrenarRedSalto(datos_salto)
+        
+        texto = fuente.render("Entrenando Red Neuronal (movimiento)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2 + 30))
+        pygame.display.flip()
+        exito_movimiento = entrenarRedMovimiento(datos_movimiento)
+        
+    elif tipo_modelo == "dt":
+        texto = fuente.render("Entrenando Árbol de Decisión (salto)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2))
+        pygame.display.flip()
+        exito_salto = entrenar_modelo_salto_dt(datos_salto)
+        
+        texto = fuente.render("Entrenando Árbol de Decisión (movimiento)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2 + 30))
+        pygame.display.flip()
+        exito_movimiento = entrenar_modelo_movimiento_dt(datos_movimiento)
+        
+    elif tipo_modelo == "knn":
+        texto = fuente.render("Entrenando KNN (salto)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2))
+        pygame.display.flip()
+        exito_salto = entrenar_modelo_salto_knn(datos_salto)
+        
+        texto = fuente.render("Entrenando KNN (movimiento)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2 + 30))
+        pygame.display.flip()
+        exito_movimiento = entrenar_modelo_movimiento_knn(datos_movimiento)
+    
+    # Actualizar estado de modelos cargados
+    if exito_salto:
+        modelos_cargados[tipo_modelo]["salto"] = True
+    if exito_movimiento:
+        modelos_cargados[tipo_modelo]["movimiento"] = True
+    
+    # Mostrar resultado
+    pantalla.fill(NEGRO)
+    if exito_salto and exito_movimiento:
+        texto = fuente.render(f"¡Modelo {tipo_modelo.upper()} entrenado con éxito!", True, VERDE)
     else:
-        texto = fuente.render("Entrenamiento incompleto", True, ROJO)
+        texto = fuente.render(f"Entrenamiento parcial de {tipo_modelo.upper()}", True, ROJO)
     
     pantalla.blit(texto, (w // 3, h // 2))
     pygame.display.flip()
     pygame.time.delay(2000)
+    
+    # Volver al menú principal
+    mostrar_menu()
+
+def entrenar_todos_modelos():
+    """Entrena todos los modelos disponibles"""
+    global modelos_cargados
+    
+    pantalla.fill(NEGRO)
+    texto = fuente.render("Entrenando todos los modelos...", True, BLANCO)
+    pantalla.blit(texto, (w // 3, h // 2 - 60))
+    pygame.display.flip()
+    
+    # Verificar datos suficientes
+    if len(datos_salto) < 10 or len(datos_movimiento) < 10:
+        texto = fuente.render("No hay suficientes datos (mínimo 10)", True, ROJO)
+        pantalla.blit(texto, (w // 3, h // 2))
+        pygame.display.flip()
+        pygame.time.delay(2000)
+        mostrar_menu()
+        return
+    
+    # Entrenar todos los modelos de salto
+    y_offset = -30
+    for tipo, nombre in [("nn", "Red Neuronal"), ("dt", "Árbol de Decisión"), ("knn", "KNN")]:
+        y_offset += 60
+        
+        # Entrenar modelo de salto
+        texto = fuente.render(f"Entrenando {nombre} (salto)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2 - 30 + y_offset))
+        pygame.display.flip()
+        
+        if tipo == "nn":
+            if entrenarRedSalto(datos_salto):
+                modelos_cargados[tipo]["salto"] = True
+        elif tipo == "dt":
+            if entrenar_modelo_salto_dt(datos_salto):
+                modelos_cargados[tipo]["salto"] = True
+        elif tipo == "knn":
+            if entrenar_modelo_salto_knn(datos_salto):
+                modelos_cargados[tipo]["salto"] = True
+        
+        # Entrenar modelo de movimiento
+        texto = fuente.render(f"Entrenando {nombre} (movimiento)...", True, BLANCO)
+        pantalla.blit(texto, (w // 3, h // 2 + y_offset))
+        pygame.display.flip()
+        
+        if tipo == "nn":
+            if entrenarRedMovimiento(datos_movimiento):
+                modelos_cargados[tipo]["movimiento"] = True
+        elif tipo == "dt":
+            if entrenar_modelo_movimiento_dt(datos_movimiento):
+                modelos_cargados[tipo]["movimiento"] = True
+        elif tipo == "knn":
+            if entrenar_modelo_movimiento_knn(datos_movimiento):
+                modelos_cargados[tipo]["movimiento"] = True
+    
+    # Mostrar resultados
+    pantalla.fill(NEGRO)
+    todos_entrenados = all(all(modelos_cargados[modelo].values()) for modelo in modelos_cargados)
+    
+    if todos_entrenados:
+        texto = fuente.render("¡Todos los modelos entrenados con éxito!", True, VERDE)
+    else:
+        texto = fuente.render("Entrenamiento parcial completado", True, ROJO)
+    
+    pantalla.blit(texto, (w // 3, h // 2))
+    pygame.display.flip()
+    pygame.time.delay(2000)
+    
+    # Volver al menú principal
+    mostrar_menu()
 
 def reiniciar_juego():
-    """Reinicia el juego tras una colisión"""
     global menu_activo, jugador, bala, bala_vertical, nave
     global bala_disparada, bala_vertical_disparada, salto, en_suelo
     
@@ -444,8 +662,7 @@ def reiniciar_juego():
     mostrar_menu()  # Mostrar el menú de nuevo para seleccionar modo
 
 def main():
-    """Función principal del juego"""
-    global salto, en_suelo, bala_disparada, jugador
+    global salto, en_suelo, bala_disparada, jugador, tipo_modelo
     
     reloj = pygame.time.Clock()
     mostrar_menu()  # Mostrar el menú al inicio
@@ -467,6 +684,26 @@ def main():
                     exit()
                 if evento.key == pygame.K_t:
                     entrenar_modelos()
+                
+                # Teclas para cambiar el modelo en tiempo real
+                if evento.key == pygame.K_1 and modo_auto:
+                    if modelos_cargados["nn"]["salto"] and modelos_cargados["nn"]["movimiento"]:
+                        tipo_modelo = "nn"
+                        print("Cambiado a Red Neuronal")
+                    else:
+                        print("Red Neuronal no entrenada")
+                elif evento.key == pygame.K_2 and modo_auto:
+                    if modelos_cargados["dt"]["salto"] and modelos_cargados["dt"]["movimiento"]:
+                        tipo_modelo = "dt"
+                        print("Cambiado a Árbol de Decisión")
+                    else:
+                        print("Árbol de Decisión no entrenado")
+                elif evento.key == pygame.K_3 and modo_auto:
+                    if modelos_cargados["knn"]["salto"] and modelos_cargados["knn"]["movimiento"]:
+                        tipo_modelo = "knn"
+                        print("Cambiado a KNN")
+                    else:
+                        print("KNN no entrenado")
         
         if not pausa:
             # Modo manual
